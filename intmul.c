@@ -57,9 +57,11 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
 
 //
 static void longmulti(const char *a, const char *b, char *c);
+static char* add(const char *a, const char *b, char *ans);
 static char int2hex(int i);
 static int hex2int(char ch);
 static char* powerh16(int n);
+static char *strrev(char *str);
 
 int main(int argc, char *argv[]){
     intmul_conf conf;
@@ -256,10 +258,14 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
     close(pipe4[1]);
 
     //rec data
-    char *ret1 = calloc((1024), sizeof(char));
-    char *ret2 = calloc((1024), sizeof(char));
-    char *ret3 = calloc((1024), sizeof(char));
-    char *ret4 = calloc((1024), sizeof(char));
+    /*char *ret1 = calloc((2024), sizeof(char));
+    char *ret2 = calloc((2024), sizeof(char));
+    char *ret3 = calloc((2024), sizeof(char));
+    char *ret4 = calloc((2024), sizeof(char));*/
+    char ret1[5012];
+    char ret2[5012];
+    char ret3[5012];
+    char ret4[5012];
 
     int status;
 
@@ -274,6 +280,12 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
         ERROR_EXIT("no received data %s\n", strerror(errno));
     }
     close(pipe1[0]);
+    for(int i = 0; i < strlen(ret1); i++) {
+        if(ret1[i] == '\n'){
+            ret1[i] = 0;
+            break;
+        }
+    }
 
     // child 2
     w = waitpid(salves.pid2, &status, WUNTRACED | WCONTINUED);
@@ -286,6 +298,12 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
         ERROR_EXIT("no received data %s\n", strerror(errno));
     }
     close(pipe2[0]);
+    for(int i = 0; i < strlen(ret2); i++) {
+        if(ret2[i] == '\n'){
+            ret2[i] = 0;
+            break;
+        }
+    }
 
     // child 3
     w = waitpid(salves.pid3, &status, WUNTRACED | WCONTINUED);
@@ -298,6 +316,12 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
         ERROR_EXIT("no received data %s\n", strerror(errno));
     }
     close(pipe3[0]);
+    for(int i = 0; i < strlen(ret3); i++) {
+        if(ret3[i] == '\n'){
+            ret3[i] = 0;
+            break;
+        }
+    }
 
     // child 4
     w = waitpid(salves.pid4, &status, WUNTRACED | WCONTINUED);
@@ -310,6 +334,12 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
         ERROR_EXIT("no received data %s\n", strerror(errno));
     }
     close(pipe4[0]);
+    for(int i = 0; i < strlen(ret4); i++) {
+        if(ret4[i] == '\n'){
+            ret4[i] = 0;
+            break;
+        }
+    }
 
     uint64_t l1,l2,l3,l4;
 
@@ -318,29 +348,25 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
     l3 = strtol(ret3, NULL, 16);
     l4 = strtol(ret4, NULL, 16);
 
-    // NOTE: A · B = Ah · Bh · 16n + Ah · Bl · 16n/2 + Al · Bh · 16n/2 + Al · Bl , this is how the result is computated
-    uint64_t result = l1 * powl(16, salves.n) + l2 * powl(16, (salves.n /2)) + l3 * powl(16, (salves.n /2)) + l4;
-    fprintf(stdout, "%llx\n", result);
+    // NOTE: DEPRECATED A · B = Ah · Bh · 16n + Ah · Bl · 16n/2 + Al · Bh · 16n/2 + Al · Bl , this is how the result is computated
+    // uint64_t result = l1 * powl(16, salves.n) + l2 * powl(16, (salves.n /2)) + l3 * powl(16, (salves.n /2)) + l4;
+    // fprintf(stdout, "%llx\n", result);
 
+    // NOTE: the new computation logik without the usage of long multiplikations
+    char *multiplication1 = malloc(1024);
+    char *multiplication2 = malloc(1024);
+    char *multiplication3 = malloc(1024);
+    char *zw = malloc(1024);
+    char *ans = malloc(1024);
 
-    // THIS PARTS IS EXPERIMANETAL
+    longmulti(ret1, powerh16(salves.n), multiplication1);
+    longmulti(ret2, powerh16((salves.n /2)), multiplication2);
+    longmulti(ret3, powerh16((salves.n /2)), multiplication3);
 
-
-    //char multiplication[1024];
-
-    //longmulti(ret1, powerh16(salves.n), multiplication);
-    /*
-    fprintf(stdout, "%llx\n", l1);
-    fprintf(stdout, "%llx\n", l2);
-    fprintf(stdout, "%llx\n", l3);
-    fprintf(stdout, "%llx\n", l4); */
-    
-    /*fprintf(stdout, "%llx\n", result); */
-    //
-    free(ret1);
-    free(ret2);
-    free(ret3);
-    free(ret4);
+    ans = add(multiplication1, multiplication2, zw);
+    ans = add(ans, multiplication3, zw);
+    ans = add(ans, ret4, zw); 
+    fprintf(stdout, "%s\n", ans);
 }
 
 /**
@@ -421,6 +447,36 @@ static void longmulti(const char *a, const char *b, char *c)
 
 /**
  */
+static char* add(const char *a, const char *b, char *ans){
+    int alen, blen;
+    int i, carry=0;
+    char *wk;
+    char *awk=strdup(a);
+    char *bwk=strdup(b);
+    int n;
+
+    alen=strlen(strrev(awk));
+    blen=strlen(strrev(bwk));
+    if(alen<blen){
+        alen ^= blen;blen ^= alen;alen ^= blen;//swap
+        wk = awk ; awk = bwk ; bwk = wk;
+    }
+    ans[alen+1]=ans[alen]='\0';
+    for(i=0;i<alen;++i){
+        n = hex2int(awk[i]) +(i<blen ? hex2int(bwk[i]): 0)+carry;
+        carry = n/ 16;
+        ans[i] = int2hex(n % 16);
+    }
+    if(carry){
+        ans[i++]='1';
+    }
+    free(awk);
+    free(bwk);
+    return strrev(ans);
+} 
+
+/**
+ */
 static char* powerh16(int n)
 {
     char *c = calloc((n+1), sizeof(char));
@@ -464,6 +520,19 @@ static char int2hex(int i)
         return 'f';
     
     return 'a';
+} 
+
+/**
+ */
+static char *strrev(char *str){
+    char c, *front, *back;
+
+    if(!str || !*str)
+        return str;
+    for(front=str,back=str+strlen(str)-1;front < back;front++,back--){
+        c=*front;*front=*back;*back=c;
+    }
+    return str;
 } 
 
 /**
