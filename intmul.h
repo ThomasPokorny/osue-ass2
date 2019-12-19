@@ -24,4 +24,18 @@ typedef struct intmul_confs {
    char *hex_2; 
 } intmul_conf;
 
+/**
+ */ 
+typedef struct master_confs {
+   int pid1;
+   int pid2;
+   int pid3;
+   int pid4;
+   char *ah;
+   char *al;
+   char *bh;
+   char *bl; 
+   size_t n;
+} master_conf;
+
 #endif 
