@@ -1,5 +1,5 @@
 /********************************************//**
- * @mainpage  INTMUL Implement an algorithm for the efficient multiplication of large integers. 
+ * @mainpage  INTMUL Implements an algorithm for the efficient multiplication of large integers. 
  * 
  * @file intmul.c
  * @author Thomas Robert Pokorny 1527212
@@ -16,8 +16,6 @@
  * Calling synopsis:
  *  intmul
  * 
- * 
- * @todo FREE ALL String !!
  ***********************************************/
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,7 +38,7 @@
 
 
 #define ERROR_EXIT(...) { fprintf(stderr, "ERROR: " __VA_ARGS__); exit(EXIT_FAILURE); }
-const bool DEBUG = false;
+const bool DEBUG = false; // NOTE: set this flag to true in order to print debug messags
 
 /* FUNCTIONS USED BY THE APPLICATION */
 static void debugLog(char *m, char* obj);
@@ -51,12 +49,12 @@ static void multRec(intmul_conf conf);
 static char* strsplit_one(char *str);
 static char* strsplit_two(char *str);
 
-// 
+// functions for root and child processes
 static void slave(int pipe[]);
 static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],int pipe4[2]);
 
-//
-static void longmulti(const char *a, const char *b, char *c);
+// helper functions for hex muktiplikation
+static void multi(const char *a, const char *b, char *c);
 static char* add(const char *a, const char *b, char *ans);
 static char int2hex(int i);
 static int hex2int(char ch);
@@ -74,10 +72,11 @@ int main(int argc, char *argv[]){
         debugLog("2nd value", conf.hex_2);
     }
 
-    // mult(strtol(conf.hex_1, NULL, 0), strtol(conf.hex_2, NULL, 0));
     mult(conf);
 
-    exit(EXIT_SUCCESS); 
+    free(conf.hex_1);
+    free(conf.hex_2);
+    exit(EXIT_SUCCESS);  
 }
 
 /** IMPLEMENTATION OF FUNCTIONS **/
@@ -114,8 +113,9 @@ static void parsrgs(intmul_conf *conf){
         ERROR_EXIT("integers do not have equal lenght! %s\n", strerror(errno));
 }
 
-/*
-* TODO: comment
+/**
+* @brief main logik, if the lenght if the given numbers is 1, the result is computed, otherwise the recursive fork logik is invoked
+* @param conf struct that contains the first and second number
 */
 static void mult(intmul_conf conf){
 
@@ -127,7 +127,7 @@ static void mult(intmul_conf conf){
 
         int pord = d1 * d2;
         fprintf(stdout, "%x\n", pord);
-        exit(EXIT_SUCCESS); 
+        exit(EXIT_SUCCESS);   
     }
     // NOTE: the main fork and recursive logik
     else{
@@ -136,7 +136,7 @@ static void mult(intmul_conf conf){
 }
 
 /**
- * @brief ecursively execute this program in four child processes one for each computation
+ * @brief recursively executes this program in four child processes one for each computation
  * @param conf contains the integers
  */ 
 static void multRec(intmul_conf conf){
@@ -163,29 +163,35 @@ static void multRec(intmul_conf conf){
     pipe(pipe4);
 
     pid1 = fork();
-    if(pid1 == -1)
-        ERROR_EXIT("could not fork  %s\n", strerror(errno));
+    if(pid1 == -1){
+        if (errno == EAGAIN) 
+            printf("errno &d\n", errno);
+            ERROR_EXIT("could not fork 1 EAGAIN %s\n", strerror(errno));
+         if (errno == ENOMEM) 
+            ERROR_EXIT("could not fork 1 ENOMEM %s\n", strerror(errno));
+        ERROR_EXIT("could not fork 1 %s\n", strerror(errno));
+    }
     if(pid1 == 0){
         slave(pipe1);
     }
     else{
         pid2 = fork();
         if(pid2 == -1)
-            ERROR_EXIT("could not fork  %s\n", strerror(errno));
+            ERROR_EXIT("could not fork 2 %s\n", strerror(errno));
         if(pid2 == 0){
             slave(pipe2);
         }
         else{
             pid3 = fork();
             if(pid3 == -1)
-                ERROR_EXIT("could not fork  %s\n", strerror(errno));
+                ERROR_EXIT("could not fork 3 %s\n", strerror(errno));
             if(pid3 == 0){
                 slave(pipe3);
             }
             else{
                 pid4 = fork();
                 if(pid4 == -1)
-                    ERROR_EXIT("could not fork  %s\n", strerror(errno));
+                    ERROR_EXIT("could not fork 4 %s\n", strerror(errno));
                 if(pid4 == 0){
                     slave(pipe4);
                 }
@@ -214,10 +220,13 @@ static void multRec(intmul_conf conf){
     free(al);
     free(bh);
     free(bl);
+    exit(EXIT_SUCCESS);  
 }
 
 /**
- * @brief executes the children
+ * @brief this code gets executed by the child processs after fork, executes a new instantce of intmul
+ * fork > exec* 
+ * @param pipe the pipe for process communication
  */ 
 static void slave(int pipe[]){
 
@@ -231,7 +240,12 @@ static void slave(int pipe[]){
 }
 
 /**
- * @brief executes the children
+ * @brief the root process, splits the numbers and sends them to the child processes 
+ * @param slaves this struct contains the process ids of the child processes, and the split integers 
+ * @param pipe1 communication to child 1
+ * @param pipe2 communication to child 2
+ * @param pipe3 communication to child 3
+ * @param pipe4 communication to child 4
  */ 
 static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],int pipe4[2]){
     pid_t w;
@@ -262,10 +276,10 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
     char *ret2 = calloc((2024), sizeof(char));
     char *ret3 = calloc((2024), sizeof(char));
     char *ret4 = calloc((2024), sizeof(char));*/
-    char ret1[5012];
-    char ret2[5012];
-    char ret3[5012];
-    char ret4[5012];
+    char ret1[512];
+    char ret2[512];
+    char ret3[512];
+    char ret4[512];
 
     int status;
 
@@ -275,6 +289,8 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
         perror("waitpid");
         ERROR_EXIT("process finished with wrong exit code %s\n", strerror(errno));
     }
+    if(WIFEXITED(status) == false)
+        ERROR_EXIT("process finished with wrong exit code %s\n", strerror(errno));
 
     if(read(pipe1[0], ret1, sizeof(ret1)) == 0){
         ERROR_EXIT("no received data %s\n", strerror(errno));
@@ -293,6 +309,8 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
         perror("waitpid");
         ERROR_EXIT("process finished with wrong exit code %s\n", strerror(errno));
     }
+    if(WIFEXITED(status) == false)
+        ERROR_EXIT("process finished with wrong exit code %s\n", strerror(errno));
 
     if(read(pipe2[0], ret2, sizeof(ret2)) == 0){
         ERROR_EXIT("no received data %s\n", strerror(errno));
@@ -311,6 +329,8 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
         perror("waitpid");
         ERROR_EXIT("process finished with wrong exit code %s\n", strerror(errno));
     }
+    if(WIFEXITED(status) == false)
+        ERROR_EXIT("process finished with wrong exit code %s\n", strerror(errno));
 
     if(read(pipe3[0], ret3, sizeof(ret3)) == 0){
         ERROR_EXIT("no received data %s\n", strerror(errno));
@@ -329,6 +349,8 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
         perror("waitpid");
         ERROR_EXIT("process finished with wrong exit code %s\n", strerror(errno));
     }
+    if(WIFEXITED(status) == false)
+        ERROR_EXIT("process finished with wrong exit code %s\n", strerror(errno));
 
     if(read(pipe4[0], ret4, sizeof(ret3)) == 0){
         ERROR_EXIT("no received data %s\n", strerror(errno));
@@ -341,12 +363,13 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
         }
     }
 
+    /* DEPRECATED
     uint64_t l1,l2,l3,l4;
 
     l1 = strtol(ret1, NULL, 16);
     l2 = strtol(ret2, NULL, 16);
     l3 = strtol(ret3, NULL, 16);
-    l4 = strtol(ret4, NULL, 16);
+    l4 = strtol(ret4, NULL, 16); */
 
     // NOTE: DEPRECATED A · B = Ah · Bh · 16n + Ah · Bl · 16n/2 + Al · Bh · 16n/2 + Al · Bl , this is how the result is computated
     // uint64_t result = l1 * powl(16, salves.n) + l2 * powl(16, (salves.n /2)) + l3 * powl(16, (salves.n /2)) + l4;
@@ -359,22 +382,32 @@ static void master(master_conf salves, int pipe1[2], int pipe2[2], int pipe3[2],
     char *zw = malloc(1024);
     char *ans = malloc(1024);
 
-    longmulti(ret1, powerh16(salves.n), multiplication1);
-    longmulti(ret2, powerh16((salves.n /2)), multiplication2);
-    longmulti(ret3, powerh16((salves.n /2)), multiplication3);
+    multi(ret1, powerh16(salves.n), multiplication1);
+    multi(ret2, powerh16((salves.n /2)), multiplication2);
+    multi(ret3, powerh16((salves.n /2)), multiplication3);
 
     ans = add(multiplication1, multiplication2, zw);
     ans = add(ans, multiplication3, zw);
     ans = add(ans, ret4, zw); 
+
     fprintf(stdout, "%s\n", ans);
+
+    // closing other
+    close(pipe1[0]);
+    close(pipe2[0]);
+    close(pipe3[0]);
+    close(pipe4[0]);
+    free(multiplication1);
+    free(multiplication2);
+    free(multiplication3);
+    free(zw);
 }
 
 /**
- * @brief splits a string into two halfs and sets the first half into h1 and the second half into h2, , terminate the program with exit status EXIT_FAILURE if the number of digits is not even.
- * @param h1 the first half of the string
- * @param h2 the second half of the string
- * @param str the given string that is going to be split 
- */
+ * @brief splits given part in two halfs and returns the first half
+ * @param str the given string
+ * @return the second half of the string
+ */ 
 static char* strsplit_one(char *str){
     int len = (strlen(str) -1);
     if((len) % 2 != 0)
@@ -390,8 +423,9 @@ static char* strsplit_one(char *str){
 }
 
 /**
- * @todo write comments
- * 
+ * @brief splits given part in two halfs and returns the second half
+ * @param str the given string
+ * @return the second half of the string
  */ 
 static char* strsplit_two(char *str){
     int len = (strlen(str) -1);
@@ -414,8 +448,12 @@ static char* strsplit_two(char *str){
 }
 
 /**
+ * @brief this function can be used to multiply two (large) hex numbers, saved in strings
+ * @param a the first number
+ * @param b the second number
+ * @param c stores the result
  */ 
-static void longmulti(const char *a, const char *b, char *c)
+static void multi(const char *a, const char *b, char *c)
 {
 	int i = 0, j = 0, k = 0, n, carry;
 	int la, lb;
@@ -446,7 +484,12 @@ static void longmulti(const char *a, const char *b, char *c)
 }
 
 /**
- */
+ * @brief this function can be used to add two (large) hex numbers, saved in strings
+ * @param a the first number
+ * @param b the second number
+ * @param ans stores the temp result
+ * @return the reulst of the computation
+ */ 
 static char* add(const char *a, const char *b, char *ans){
     int alen, blen;
     int i, carry=0;
@@ -476,7 +519,10 @@ static char* add(const char *a, const char *b, char *ans){
 } 
 
 /**
- */
+ * @brief this function computes: 16^n in the hex system
+ * @param n power
+ * @result 16^n as hex
+ */ 
 static char* powerh16(int n)
 {
     char *c = calloc((n+1), sizeof(char));
@@ -488,7 +534,11 @@ static char* powerh16(int n)
 } 
 
 /**
- */
+ * PRECONDITION: given char musst be part of the hex system (1 ..9, ABCDEF)
+ * @brief the function takes a char and returns the int value
+ * @param  ch the hex char
+ * @return the int value 
+ */ 
 static int hex2int(char ch)
 {
     if (ch >= '0' && ch <= '9')
@@ -501,6 +551,10 @@ static int hex2int(char ch)
 }
 
 /**
+ * PRECONDITION: the given int has to be smaller than 16
+ * @brief takes an int and returns the hex value as char
+ * @param  i the given int
+ * @return the hex value as char
  */ 
 static char int2hex(int i)
 {
@@ -523,6 +577,9 @@ static char int2hex(int i)
 } 
 
 /**
+ * @brief reverses the given string
+ * @param str string to reverse
+ * @return the reversed string
  */
 static char *strrev(char *str){
     char c, *front, *back;
